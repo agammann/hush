@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8"><title>Hush synthetic notes</title>
+<h1>Synthetic notes</h1><input id="note"><button id="save">Save</button><p id="value"></p><button id="export">Export</button><input id="import" type="file">
+<script>
+const show=()=>document.querySelector('#value').textContent=localStorage.note||''; show();
+document.querySelector('#save').onclick=()=>{localStorage.note=document.querySelector('#note').value;show()};
+document.querySelector('#export').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({version:1,note:localStorage.note})]));a.download='backup.json';a.click()};
+document.querySelector('#import').onchange=async e=>{const b=JSON.parse(await e.target.files[0].text());if(b.version!==1)throw Error('unsupported backup');localStorage.note=b.note;show()};
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+</script>

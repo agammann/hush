@@ -1,0 +1,9 @@
+{
+  "name": "hush-survival",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test test/*.test.js", "demo": "node examples/demo.js"},
+  "dependencies": {"playwright": "1.62.1"},
+  "engines": {"node": ">=20"}
+}
