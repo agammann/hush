@@ -33,8 +33,9 @@ export async function run(recipe, options = {}) {
   // mkdir without recursive is atomic and fails if any file or directory exists.
   await mkdir(out);
   const report = {name:recipe.name, started:new Date().toISOString(), browser:'chromium', status:'passed', steps:[]};
-  let context, page, browser, backup, offline = false;
-  const profile = await mkdtemp(path.join(os.tmpdir(),'hush-profile-'));
+  let context, page, backup, offline = false;
+  let profile = await mkdtemp(path.join(os.tmpdir(),'hush-profile-'));
+  const profiles = [profile];
   let stage = 'setup';
   try {
     const chromium = options.chromium ?? require('playwright').chromium;
@@ -57,14 +58,14 @@ export async function run(recipe, options = {}) {
             case 'reload': await page.reload({waitUntil:'load',timeout:10000}); break;
             case 'restart': { const url=page.url(); await context.close(); await launch(); await page.goto(url,{waitUntil:'load',timeout:10000}); break; }
             case 'export': { const [download]=await Promise.all([page.waitForEvent('download',{timeout:5000}),page.locator(step.selector).click()]); backup=path.join(out,'backup.bin'); await download.saveAs(backup); break; }
-            case 'import': { const input=step.fixture ? path.resolve(step.fixture) : backup; if (!input) throw Error('No export in this run'); const url=page.url(); await context.close(); if (browser) await browser.close(); browser=await chromium.launch({headless:true}); context=await browser.newContext(); page=await context.newPage(); await context.setOffline(offline); await page.goto(url,{waitUntil:'load',timeout:10000}); await page.locator(step.selector).setInputFiles(input); break; }
+            case 'import': { const input=step.fixture ? path.resolve(step.fixture) : backup; if (!input) throw Error('No export in this run'); const url=page.url(); await context.close(); profile=await mkdtemp(path.join(os.tmpdir(),'hush-profile-')); profiles.push(profile); await launch(); await page.goto(url,{waitUntil:'load',timeout:10000}); await page.locator(step.selector).setInputFiles(input); break; }
             case 'screenshot': await page.screenshot({path:path.join(out,`step-${i+1}.png`)}); break;
           }
         } catch(e) { entry.status=classifyError('journey',e,step.action); entry.detail=e.message; report.status=entry.status; try { await page.screenshot({path:path.join(out,`failure-${i+1}.png`)}); } catch {} break; }
       }
     } finally { try { await writeFile(path.join(out,'browser.log'),logs.join('\n')); } catch (e) { report.status='failed'; report.steps.push({action:'evidence',status:'failed',detail:`Cannot write browser.log: ${e.message}`}); } }
   } catch(e) { const status=classifyError(stage,e); if (report.status !== 'failed') report.status=status; report.steps.push({action:stage,status,detail:e.message}); }
-  finally { if(context) await context.close().catch(()=>{}); if(browser) await browser.close().catch(()=>{}); await rm(profile,{recursive:true,force:true}); }
+  finally { if(context) await context.close().catch(()=>{}); for (const dir of profiles) await rm(dir,{recursive:true,force:true}); }
   await writeFile(path.join(out,'report.json'),JSON.stringify(report,null,2)); await writeFile(path.join(out,'report.html'),html(report));
   return report;
 }
