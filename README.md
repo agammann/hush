@@ -4,10 +4,10 @@ Hush runs maintainer-authored browser journeys to check whether specific app con
 
 ## Try the synthetic example
 
-Requires Node 20+, npm and a Playwright-compatible Chromium. From a fresh checkout:
+Requires Node 20+, npm and a Playwright-compatible Chromium. From a fresh checkout (the committed lockfile pins the package resolution):
 
 ```sh
-npm install
+npm ci
 npx playwright install chromium
 npm test
 npm run demo
