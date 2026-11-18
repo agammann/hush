@@ -15,6 +15,19 @@ test('unexpected setup error fails',()=>workspace(async(root,out)=>{const chromi
 test('browser log write error fails',()=>workspace(async(root,out)=>{const chromium={launchPersistentContext:async()=>{await mkdir(path.join(out,'browser.log'));throw Error('launch bug')}};const r=await run(recipe,{output:out,chromium});assert.equal(r.status,'failed');assert.ok(r.steps.some(s=>s.action==='evidence'&&s.status==='failed'))}));
 test('report write error rejects',()=>workspace(async(root,out)=>{const chromium={launchPersistentContext:async()=>{await mkdir(path.join(out,'report.json'));throw Error('launch bug')}};await assert.rejects(run(recipe,{output:out,chromium}))}));
 test('evidence failure wins over known restriction',()=>workspace(async(root,out)=>{const chromium={launchPersistentContext:async()=>{await mkdir(path.join(out,'browser.log'));throw Error('spawn chromium EPERM')}};const r=await run(recipe,{output:out,chromium});assert.equal(r.status,'failed');assert.ok(r.steps.some(s=>s.action==='evidence'));assert.ok(r.steps.some(s=>s.status==='environment-blocked'))}));
+
+test('browser cleanup failure is retained in both failure reports', () => workspace(async (root, out) => {
+  const page = { on() {}, async screenshot() {} };
+  const chromium = { async launchPersistentContext() {
+    return { pages: () => [page], async setOffline() {}, async close() { throw Error('Synthetic close failure'); } };
+  } };
+  const report = await run(recipe, {output:out, chromium});
+  assert.equal(report.status, 'failed');
+  assert.equal(report.steps[0].status, 'passed');
+  assert.deepEqual(report.steps.at(-1), {action:'cleanup', status:'failed', detail:'Cannot close browser context: Synthetic close failure'});
+  assert.equal(JSON.parse(await readFile(path.join(out,'report.json'),'utf8')).status, 'failed');
+  assert.match(await readFile(path.join(out,'report.html'),'utf8'), /Synthetic close failure/);
+}));
 test('existing directory is preserved',()=>workspace(async(root,out)=>{await mkdir(out);await writeFile(path.join(out,'report.json'),'keep');await assert.rejects(run(recipe,{output:out,chromium:blocked}),{code:'EEXIST'});assert.equal(await readFile(path.join(out,'report.json'),'utf8'),'keep')}));
 test('existing file is preserved',()=>workspace(async(root,out)=>{await writeFile(out,'keep');await assert.rejects(run(recipe,{output:out,chromium:blocked}),{code:'EEXIST'});assert.equal(await readFile(out,'utf8'),'keep')}));
 test('fixture within existing output is preserved',()=>workspace(async(root,out)=>{await mkdir(out);const fixture=path.join(out,'backup.bin');await writeFile(fixture,'fixture');const r={name:'x',steps:[{action:'import',selector:'input',fixture}]};await assert.rejects(run(r,{output:out,chromium:blocked}),{code:'EEXIST'});assert.equal(await readFile(fixture,'utf8'),'fixture')}));

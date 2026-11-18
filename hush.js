@@ -33,11 +33,16 @@ export async function run(recipe, options = {}) {
   // mkdir without recursive is atomic and fails if any file or directory exists.
   await mkdir(out);
   const report = {name:recipe.name, started:new Date().toISOString(), browser:'chromium', status:'passed', steps:[]};
-  let context, page, backup, offline = false;
-  let profile = await mkdtemp(path.join(os.tmpdir(),'hush-profile-'));
-  const profiles = [profile];
+  let context, page, backup, profile, offline = false;
+  const profiles = [];
+  const cleanupFailure = (detail, error) => {
+    report.status = 'failed';
+    report.steps.push({action:'cleanup', status:'failed', detail:`${detail}: ${error.message}`});
+  };
   let stage = 'setup';
   try {
+    profile = await mkdtemp(path.join(os.tmpdir(),'hush-profile-'));
+    profiles.push(profile);
     const chromium = options.chromium ?? require('playwright').chromium;
     const launch = async () => { context = await chromium.launchPersistentContext(profile,{headless:true}); page = context.pages()[0] || await context.newPage(); page.on('console', msg => logs.push(`console ${msg.type()}: ${msg.text()}`)); page.on('pageerror', err => logs.push(`pageerror: ${err.message}`)); await context.setOffline(offline); };
     const logs=[];
@@ -65,7 +70,16 @@ export async function run(recipe, options = {}) {
       }
     } finally { try { await writeFile(path.join(out,'browser.log'),logs.join('\n')); } catch (e) { report.status='failed'; report.steps.push({action:'evidence',status:'failed',detail:`Cannot write browser.log: ${e.message}`}); } }
   } catch(e) { const status=classifyError(stage,e); if (report.status !== 'failed') report.status=status; report.steps.push({action:stage,status,detail:e.message}); }
-  finally { if(context) await context.close().catch(()=>{}); for (const dir of profiles) await rm(dir,{recursive:true,force:true}); }
+  finally {
+    if (context) {
+      try { await context.close(); }
+      catch (error) { cleanupFailure('Cannot close browser context', error); }
+    }
+    for (const dir of profiles) {
+      try { await rm(dir,{recursive:true,force:true,maxRetries:3,retryDelay:100}); }
+      catch (error) { cleanupFailure('Cannot remove temporary browser profile', error); }
+    }
+  }
   await writeFile(path.join(out,'report.json'),JSON.stringify(report,null,2)); await writeFile(path.join(out,'report.html'),html(report));
   return report;
 }
