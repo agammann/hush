@@ -1,6 +1,6 @@
-# Hush survival kit (alpha)
+# Hush
 
-Hush runs maintainer-authored browser journeys to check whether specific app content survives offline editing, reload, browser restart and export/import. It writes a local JSON and HTML report, browser log, screenshots and an exported backup. It is a prototype, not proof that an app is safe or that all data survives.
+Hush runs maintainer-authored Chromium journeys to check whether specific app content survives offline edits, reload, browser restart, an upgrade and backup restore. It writes local JSON and HTML reports, a browser log, and any screenshots and backups requested by the recipe. Results cover the content and conditions asserted by that recipe.
 
 ## Try the synthetic example
 
@@ -13,20 +13,28 @@ npm test
 npm run demo
 ```
 
-Open `report.html` inside the newly created `example-evidence-...` directory. The demo starts and closes a loopback server. It uses synthetic text only. Exit 0 means the authored assertions passed, 1 means a journey step failed, and 2 indicates invalid input or setup failure. The browser's network access can be blocked by an execution environment; investigate that separately from application failures.
+Open `report.html` inside the newly created `example-evidence-...` directory. The demo starts and closes a loopback server and uses synthetic notes. It checks offline edits, a build switch, and that both a newly exported backup and an older fixture survive a restart after import. Unit tests use mock browser objects for validation and error reporting. The demo runs in Chromium.
+
+Exit 0 means the authored assertions and evidence collection passed. Exit 1 indicates a recorded setup, journey, cleanup or evidence failure. Exit 2 covers invalid input, recognized environment restrictions, or an error that prevents writing the report.
+
+On Windows, if the local demo loads but `serviceWorkerReady` times out with a deeply nested temporary directory, try a shorter writable location for `TEMP` and `TMP` in the current shell. Chromium stores service-worker state under the temporary test profile.
 
 ## Author a journey
 
-Run `node cli.js recipe.json output-directory`. The output directory must not exist, and its parent must already exist. Hush reserves it exclusively; use a new directory for every run. A recipe has a `name` and ordered `steps`. Supported actions: `goto` (`url`), `fill` (`selector`, `value`), `click` (`selector`), `expectText` (`selector`, `value`, substring match), `offline` (boolean `value`), `reload`, `restart`, `serviceWorkerReady`, `export` (`selector`, triggers a download), `import` (`selector`, file input in a fresh context), and `screenshot`. `switchBuild` sends a POST to a same-origin endpoint managed by the test server; it must atomically make the next build available. `import` optionally accepts a `fixture` file path, relative to the current working directory. See `examples/demo.js` for the complete workflow. Use URLs for builds under the same origin when testing a migration; the maintainer is responsible for serving and switching those builds. `restart` reopens the browser with its existing profile; import starts a fresh browser profile, loads the backup, and keeps that profile for later restarts.
+Run `node cli.js recipe.json output-directory`. If you omit the output directory, Hush uses `hush-evidence` in the current directory. Hush reserves the directory exclusively. Use a new name under an existing parent for every run.
 
-A failing step stops the journey. Known browser launch permission denial and browser network access denial are marked `environment-blocked`; other setup and journey errors are failures. Evidence write failures are failures or produce a nonzero error if the report itself cannot be written. Network access denial is marked `environment-blocked`; other navigation errors require investigation. Unsupported actions are rejected during validation, before a report is created. A screenshot is attempted on failure. Reports, downloads, screenshots, logs and temporary browser profiles may contain app data: use synthetic data and review evidence before sharing. Do not point this tool at an untrusted recipe: actions execute against the supplied application.
+A recipe has a `name` and ordered `steps`. Supported actions include `goto` (`url`), `fill` (`selector`, `value`), `click` (`selector`), `expectText` (`selector`, `value`, substring match), `offline` (boolean `value`), `reload`, `restart`, `serviceWorkerReady`, `export` (`selector`, triggers a download), `import` (`selector`, file input in a fresh context), and `screenshot`. `switchBuild` sends a POST to a same-origin endpoint on the maintainer’s test server. The endpoint must atomically make the next build available. Use the same origin for both builds.
+
+`restart` closes Chromium and reopens its current profile. `import` starts a new profile, loads the backup and keeps that profile for later restarts. It can read an optional `fixture` path relative to the working directory. See `examples/demo.js` for a complete recipe with assertions after each restore.
+
+A failed journey step stops execution and attempts a screenshot. The report records recognized browser launch or navigation restrictions as `environment-blocked`. Failed cleanup appears in the report as a failure. Unsupported actions are rejected before a report is created. Browser actions execute against the supplied app, so use trusted recipes on controlled test targets. Reports, downloads, screenshots, logs and temporary profiles may contain app data. Use synthetic data and review evidence before sharing.
 
 ## Scope and limitations
 
-Chromium only. Offline emulation is not proof of real-device behavior, storage eviction, all network paths or OS upgrades. Assertions only cover content the recipe checks. There is no automated release/browser matrix, managed multi-build server, storage-pressure simulation, real device support, or portfolio-app dogfooding yet. The sample switches two synthetic builds and restores a versioned fixture; production migrations need application-specific fixtures and a switch endpoint. Export assumes a browser download; import assumes a file input. The sample app's service worker is illustrative, not production code. The tool does not assess installability or detect bad or incomplete oracles.
+Hush supports Chromium and recipe-authored checks. Its offline mode uses browser emulation, and its restart is a graceful browser close and open. Forced crashes, real devices, storage eviction or pressure, additional network paths, OS upgrades, and installability are outside this workflow. The maintainer provides migration fixtures and a build switch endpoint. Export assumes a browser download and import assumes a file input. The sample service worker is for the synthetic test app. Verify that your assertions cover the data you intend to check.
 
 ## Related work
 
-[pwa-check](https://github.com/pwa-today/pwa-check) offers automated PWA health checks; [pwa-offline-check](https://github.com/INNERLUXES/pwa-offline-check) inspects built sites for offline, installation and update issues. [PWA Today](https://pwa.today/) already provides hosted browser runtime and release audits, including offline navigation and updates. Hush explores a narrower local, app-authored content-survival and backup-restore workflow. These sources do not establish uniqueness or market fit.
+Related tools include [pwa-check](https://github.com/pwa-today/pwa-check), [pwa-offline-check](https://github.com/INNERLUXES/pwa-offline-check) and [PWA Today](https://pwa.today/).
 
 MIT licensed; Playwright is a separate dependency with its own license.
